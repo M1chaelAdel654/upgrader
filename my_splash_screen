@@ -1,0 +1,118 @@
+import 'package:animated_splash_screen/animated_splash_screen.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:lottie/lottie.dart';
+import 'package:page_transition/page_transition.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:upgrader/upgrader.dart';
+import 'core/routes/init.dart';
+import 'core/theming/colors/color_helper.dart';
+import 'features/onboarding/ui/onboarding_view.dart';
+import 'features/shared_widgets/update_popup.dart';
+
+
+class SplashScreen extends StatefulWidget {
+  const SplashScreen({super.key});
+
+  @override
+  State<SplashScreen> createState() => _SplashScreenState();
+}
+
+class _SplashScreenState extends State<SplashScreen> {
+  bool onboarding = false;
+  bool isNeedUpdate = false;
+  bool isLoading = true; // Add loading state
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeApp();
+  }
+
+  Future<void> _initializeApp() async {
+    await fetchPlayStoreVersion();
+    await _checkIsActive();
+    setState(() {
+      isLoading = false; // Set loading to false after initialization
+    });
+  }
+
+  Future<void> fetchPlayStoreVersion() async {
+    final upgrade = Upgrader();
+    await Upgrader.clearSavedSettings(); // Clear cached settings
+    await upgrade.initialize();
+    final playStoreVersion = upgrade.currentAppStoreVersion;
+    final currentVersion = upgrade.versionInfo?.installedVersion;
+    print('$currentVersion $playStoreVersion');
+    if (playStoreVersion != null && currentVersion != null) {
+      if (_isVersionHigher(playStoreVersion, currentVersion.toString())) {
+        isNeedUpdate = true;
+      } else {
+        isNeedUpdate = false;
+      }
+    } else {
+      isNeedUpdate = false;
+    }
+  }
+
+  Future<void> _checkIsActive() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    onboarding = prefs.getBool('onboarding') ?? false;
+  }
+  bool _isVersionHigher(String playStoreVersion, String currentVersion) {
+    final playStoreParts = playStoreVersion.split('.').map(int.parse).toList();
+    final currentParts = currentVersion.split('.').map(int.parse).toList();
+
+    for (int i = 0; i < playStoreParts.length; i++) {
+      // If currentVersion is shorter, assume trailing zeros
+      final current = i < currentParts.length ? currentParts[i] : 0;
+      if (playStoreParts[i] > current) {
+        return true; // playStoreVersion is higher
+      } else if (playStoreParts[i] < current) {
+        return false; // currentVersion is higher
+      }
+    }
+    return false; // Versions are the same
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (isLoading) {
+      // Show a loading indicator while the app is initializing
+      return Scaffold(
+        backgroundColor: ColorHelper.white,
+        body: const Center(
+          child: CircularProgressIndicator(), // Or any loading animation
+        ),
+      );
+    }
+
+    return Scaffold(
+      backgroundColor: ColorHelper.white,
+      body: Column(
+        children: [
+          Expanded(
+            flex: 2,
+            child: AnimatedSplashScreen(
+              splash: 'assets/images/logo.png',
+              nextScreen: isNeedUpdate
+                  ? const UpdatePopup()
+                  : onboarding == false
+                  ? const OnboardingView()
+                  : const InitScreen(),
+              splashTransition: SplashTransition.fadeTransition,
+              pageTransitionType: PageTransitionType.rightToLeft,
+              backgroundColor: ColorHelper.white,
+              duration: 4000, // Duration of the splash screen in milliseconds
+            ),
+          ),
+          Expanded(
+            flex: 1,
+            child: Lottie.asset('assets/Animation-1721779438395.json',
+                height: 150.h, width: 150.w),
+          ),
+        ],
+      ),
+    );
+  }
+}
